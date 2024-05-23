@@ -162,4 +162,4 @@ cython_debug/
 .vscode/
 
 output/
-2024_output.txt
+release/

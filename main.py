@@ -261,10 +261,14 @@ for block_data in block_data_list:
     block_data = [line for line in lines if '=' not in line]
     # 1文字ずつカンマを挿入 (先頭行は除く)
     block_data = [insert_commas(line) if i != 0 else line for i, line in enumerate(block_data)]
+    # "白"を空文字に置換
+    block_data.replace('白', '')
+
     # 先頭行を最終行に移動
     block_data.append(block_data.pop(0))
 
     summarized_result.append('\n'.join(block_data))
+
 
 # 調整したデータをcsvファイルに書き込む
 write_text_file(os.path.join(path, 'output', f'{output_file_name}.csv'), '\n'.join(summarized_result))

@@ -6,15 +6,15 @@ Copyright © 2024 Taichi Oikawa
 This project is licensed under the MIT License, see the LICENSE.txt file for details.
 '''
 
-import os
-import math
-import json
 import csv
+import json
+import math
+import os
 import time
 
 import openpyxl as xl
-from openpyxl.styles.borders import Border, Side
 import questionary
+from openpyxl.styles.borders import Border, Side
 from termcolor import cprint
 
 
@@ -83,293 +83,315 @@ def add_dictionaries(dict1: dict, dict2: dict) -> dict:
 
 
 ## MAIN ##
+def main():
+    # タイトル表示, ライセンス表示
+    cprint('\n================= [全校制作] モザイク画 CSV変換プログラム =================\n', 'green')
+    print('\nCopyright © 2024 Taichi Oikawa\nThis project is licensed under the MIT License, see the LICENSE.txt file for details.\n')
 
-# タイトル表示, ライセンス表示
-cprint('\n================= [全校制作] モザイク画 CSV変換プログラム =================\n', 'green')
-print('\nCopyright © 2024 Taichi Oikawa\nThis project is licensed under the MIT License, see the LICENSE.txt file for details.\n')
+    # カレントディレクトリを取得
+    path: str = os.getcwd()
+    # ファイルリストを取得
+    filelist: list[str] = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
-# カレントディレクトリを取得
-path: str = os.getcwd()
-# ファイルリストを取得
-filelist: list[str] = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+    cprint('\n--- プログラムを開始します ---\n', 'light_magenta')
 
-cprint('\n--- プログラムを開始します ---\n', 'light_magenta')
-
-# outputディレクトリが存在しない場合は作成
-if os.path.isdir(os.path.join(path, 'output')) == False:
-    try:
-        os.mkdir(os.path.join(path, 'output'))
-    except Exception as e:
-        cprint(f'outputディレクトリの作成に失敗しました。\n---------- エラーメッセージ ----------\n{e}', 'red')
-        input('\n -- 終了するには何かキーを押してください -- ')
-        os._exit(0)
+    # outputディレクトリが存在しない場合は作成
+    if os.path.isdir(os.path.join(path, 'output')) == False:
+        try:
+            os.mkdir(os.path.join(path, 'output'))
+        except Exception as e:
+            raise Exception(f'outputディレクトリの作成に失敗しました。\n{e}')
 
 
-# jsonファイルを読み込む
-if os.path.exists('settings.json'):
-    with open('settings.json', 'r') as f:
-        json_data = json.load(f)
+    # jsonファイルを読み込む
+    if os.path.exists('settings.json'):
+        with open('settings.json', 'r') as f:
+            json_data = json.load(f)
 
-    classes: list[str] = json_data['ClassNames'].split(',') if 'ClassNames' in json_data else None
-    pieces_per_origami: int = int(json_data['PiecesPerOrigami']) if 'PiecesPerOrigami' in json_data else None
-    blocks_per_class: int = int(json_data['BlocksPerClass']) if 'BlocksPerClass' in json_data else None
+        classes: list[str] = json_data['ClassNames'].split(',') if 'ClassNames' in json_data else None
+        pieces_per_origami: int = int(json_data['PiecesPerOrigami']) if 'PiecesPerOrigami' in json_data else None
+        blocks_per_class: int = int(json_data['BlocksPerClass']) if 'BlocksPerClass' in json_data else None
 
-    EXCEL_DATA: dict[str, str] = json_data['Excel'] if 'Excel' in json_data else None
+        replace_white_character: bool = True if 'ReplaceWhiteCharacter' in json_data and json_data['ReplaceWhiteCharacter'] == "True" else False
 
-    if classes == None:
-        cprint('設定ファイルにクラス名のデータがありません。', 'red')
-        input('\n -- 終了するには何かキーを押してください -- ')
-        os._exit(0)
-else:
-    cprint('設定ファイルが見つかりませんでした。', 'red')
-    input('\n -- 終了するには何かキーを押してください -- ')
-    os._exit(0)
+        EXCEL_DATA: dict[str, str] = json_data['Excel'] if 'Excel' in json_data else None
 
-
-
-# モザイク画元データを取得
-file_choices = []
-for file in filelist:
-    if file.endswith('.txt'):
-        file_choices.append(file)
-
-if file_choices == []:
-    cprint('モザイク画データが見つかりませんでした。', 'red')
-    input('\n -- 終了するには何かキーを押してください -- ')
-    os._exit(0)
-
-
-# プロパティの入力1
-mosaic_data_file: str = questionary.select('モザイク画データを選択してください: ', choices=file_choices).ask()
-output_file_name: str = questionary_text('出力ファイル名を入力してください（拡張子は不要）: ')
-
-if pieces_per_origami == None:
-    print('\n※ 1cm角の場合は15*15で225となります')
-    pieces_per_origami: int = questionary_int('1枚の折り紙で作成できるピース数を入力してください: ')
-else:
-    print(f'\n1枚の折り紙で作成できるピース数 (設定ファイル): {pieces_per_origami}')
-
-if blocks_per_class == None:
-    blocks_per_class: int = questionary_int('1クラスで作成するモザイク画のブロック数を入力してください: ')
-else:
-    print(f'1クラスで作成するモザイク画のブロック数 (設定ファイル): {blocks_per_class}')
-
-
-# モザイク画データを読み込む
-mosaic_data_lines: list[str] = read_text_file(os.path.join(path, mosaic_data_file))
-cprint(f'\n\nモザイク画データを読み込みました。ファイル名: {mosaic_data_file}\n\n', 'light_blue')
-
-# プロパティの入力2
-start_row_total_pixels: str = questionary.select('合計ピクセルが記載されている開始行を選択してください: ', choices=mosaic_data_lines[-8:]).ask()
-start_row_num: int = mosaic_data_lines.index(start_row_total_pixels)
-end_row_total_pixels: str = questionary.select('合計ピクセルが記載されている終了行を選択してください', choices=[mosaic_data_lines[start_row_num].replace('\n', ' (selected) \n')] + mosaic_data_lines[start_row_num + 1 :]).ask()
-end_row_num: int = mosaic_data_lines.index(end_row_total_pixels.replace(' (selected) \n', '\n'))
-
-cprint(f'\n計算を開始します。', 'light_green')
-time_start = time.time()
-
-# モザイク画データからピクセル合計データを取得
-pixel_sum_data_list: list = mosaic_data_lines[start_row_num: end_row_num + 1]
-# ピクセル合計データを整形  改行を置換
-pixel_sum_data: str = ''.join(pixel_sum_data_list).replace('\n', '  ')
-
-# ピクセル合計データを辞書型に変換
-pixel_sum_dict: dict[str, int] = {}
-pairs: list[str] = pixel_sum_data.split()
-for pair in pairs:
-    key, value = pair.split('=')
-    pixel_sum_dict[key] = int(value)
-
-# 必要折り紙枚数の合計を計算
-total_paper_dict: dict[str, int] = {key: math.ceil(value / pieces_per_origami) for key, value in pixel_sum_dict.items()}
-
-# 結果をリストに格納
-calc_result: list[str] = []
-for key in total_paper_dict:
-    calc_result.append(f'{key}: {pixel_sum_dict[key]}  ->  {total_paper_dict[key]}枚\n')
-
-# 合計の2行は削除
-mosaic_data_lines = mosaic_data_lines[:start_row_num] + mosaic_data_lines[end_row_num + 1:]
-
-# ブロックごとのデータを取得
-block_data_list: list[str] = []
-for i, line in enumerate(mosaic_data_lines):
-    if line.startswith('---') and i != 0:
-        # 区切り文字を追加
-        block_data_list.append('///')
-        block_data_list.append(line)
+        if classes == None:
+            raise Exception('設定ファイルにクラス名のデータがありません。')
     else:
-        block_data_list.append(line)
-
-# 区切り文字でリストを分割し再代入
-block_data_list = ''.join(block_data_list).split('///')
-
-# '='が含まれる行を取得
-calc_data_list: list[str] = []
-for block_data in block_data_list:
-    lines = block_data.split('\n')
-    for line in lines:
-        if '=' in line:
-            calc_data_list.append(line)
-    # 区切り文字を追加
-    calc_data_list.append('///')
-
-# 区切り文字でリストを分割し再代入 最後の要素は削除
-calc_data_list = ''.join(calc_data_list).split('///')[:-1]
+        raise Exception('設定ファイルが見つかりませんでした。')
 
 
-# 各クラスごとのピクセル合計データを取得
-calc_sum_class_dict: dict[str, int] = {}
-calc_class_result: list[str] = []
-class_number: int = 0
-for i, line in enumerate(calc_data_list):
-    # 辞書型に変換
-    pixel_sum_class_dict: dict[str, int] = {}
-    pairs: list[str] = line.split()
+    # モザイク画元データを取得
+    file_choices = []
+    for file in filelist:
+        if file.endswith('.txt'):
+            file_choices.append(file)
+
+    if file_choices == []:
+        raise Exception('モザイク画データが見つかりませんでした。')
+
+
+    # プロパティの入力1
+    mosaic_data_file: str = questionary.select('モザイク画データを選択してください: ', choices=file_choices).ask()
+    output_file_name: str = questionary_text('出力ファイル名を入力してください（拡張子は不要）: ')
+
+    if pieces_per_origami == None:
+        print('\n※ 1cm角の場合は15*15で225となります')
+        pieces_per_origami: int = questionary_int('1枚の折り紙で作成できるピース数を入力してください: ')
+    else:
+        print(f'\n1枚の折り紙で作成できるピース数 (設定ファイル): {pieces_per_origami}')
+
+    if blocks_per_class == None:
+        blocks_per_class: int = questionary_int('1クラスで作成するモザイク画のブロック数を入力してください: ')
+    else:
+        print(f'1クラスで作成するモザイク画のブロック数 (設定ファイル): {blocks_per_class}')
+
+
+    # モザイク画データを読み込む
+    mosaic_data_lines: list[str] = read_text_file(os.path.join(path, mosaic_data_file))
+    if mosaic_data_lines == []:
+        raise Exception('モザイク画データが読み込めませんでした。ファイルの中身を確認してください。')
+    cprint(f'\n\nモザイク画データを読み込みました。ファイル名: {mosaic_data_file}\n\n', 'light_blue')
+
+    # プロパティの入力2
+    start_row_total_pixels: str = questionary.select('合計ピクセルが記載されている開始行を選択してください: ', choices=mosaic_data_lines[-8:]).ask()
+    start_row_num: int = mosaic_data_lines.index(start_row_total_pixels)
+    end_row_total_pixels: str = questionary.select('合計ピクセルが記載されている終了行を選択してください', choices=[mosaic_data_lines[start_row_num].replace('\n', ' (selected) \n')] + mosaic_data_lines[start_row_num + 1:]).ask()
+    end_row_num: int = mosaic_data_lines.index(end_row_total_pixels.replace(' (selected) \n', '\n'))
+
+    cprint(f'\n計算を開始します。', 'light_green')
+    time_start = time.time()
+
+    # モザイク画データからピクセル合計データを取得
+    pixel_sum_data_list: list = mosaic_data_lines[start_row_num: end_row_num + 1]
+    # ピクセル合計データを整形  改行を置換
+    pixel_sum_data: str = ''.join(pixel_sum_data_list).replace('\n', '  ')
+
+    # ピクセル合計データを辞書型に変換
+    pixel_sum_dict: dict[str, int] = {}
+    pairs: list[str] = pixel_sum_data.split()
     for pair in pairs:
         key, value = pair.split('=')
-        pixel_sum_class_dict[key] = int(value)
-    calc_sum_class_dict = add_dictionaries(calc_sum_class_dict, pixel_sum_class_dict)
+        pixel_sum_dict[key] = int(value)
 
-    # 各クラス、最初の行にクラス情報を追加 結果をリストに格納
-    if (i+1)%blocks_per_class == 0:
-        calc_class_result.append(f'--------------- {classes[class_number]} ---------------')
-        for key in calc_sum_class_dict:
-            calc_class_result.append(f'{key}: {calc_sum_class_dict[key]}   [ {math.ceil(calc_sum_class_dict[key] / pieces_per_origami)}枚 ]')
-        calc_class_result.append('')
-        calc_sum_class_dict = {}
-        class_number += 1
+    # 必要折り紙枚数の合計を計算
+    total_paper_dict: dict[str, int] = {key: math.ceil(value / pieces_per_origami) for key, value in pixel_sum_dict.items()}
 
-calc_result = ''.join(calc_result) + '\n'*3 + '\n'.join(calc_class_result)
+    # 結果をリストに格納
+    calc_result: list[str] = []
+    for key in total_paper_dict:
+        calc_result.append(f'{key}: {pixel_sum_dict[key]}  ->  {total_paper_dict[key]}枚\n')
 
-# 計算した結果をファイルに書き込む
-write_text_file(os.path.join(path, 'output', f'{output_file_name}_origami.txt'), ''.join(calc_result))
+    # 合計の2行は削除
+    mosaic_data_lines = mosaic_data_lines[:start_row_num] + mosaic_data_lines[end_row_num + 1:]
 
-time_end = time.time()
-cprint(f'\n計算が完了しました。', 'light_blue')
-cprint(f'ファイル名: {output_file_name}_origami.txt     計算時間: {time_count(time_start, time_end)}\n', 'light_blue')
-
-
-
-cprint('\nデータを整形してCSVファイルに変換する処理を開始します。', 'light_green')
-time_start = time.time()
-
-summarized_result: list[str] = []
-for block_data in block_data_list:
-    lines = block_data.split('\n')[:-1]
-    # '='が含まれる行は削除
-    block_data = [line for line in lines if '=' not in line]
-    # 1文字ずつカンマを挿入 (先頭行は除く)
-    block_data = [insert_commas(line) if i != 0 else line for i, line in enumerate(block_data)]
-    # "白"を空文字に置換
-    block_data.replace('白', '')
-
-    # 先頭行を最終行に移動
-    block_data.append(block_data.pop(0))
-
-    summarized_result.append('\n'.join(block_data))
-
-
-# 調整したデータをcsvファイルに書き込む
-write_text_file(os.path.join(path, 'output', f'{output_file_name}.csv'), '\n'.join(summarized_result))
-
-time_end = time.time()
-cprint(f'\nCSVファイルに変換しました。', 'light_blue')
-cprint(f'ファイル名: {output_file_name}.csv     処理時間: {time_count(time_start, time_end)}\n', 'light_blue')
-
-
-if EXCEL_DATA != None:
-    # 全設定データがあるか確認、数値か確認
-    settings_int = ['width', 'height', 'margin_top', 'margin_bottom', 'margin_left', 'margin_right', 'margin_header', 'margin_footer']
-    settings = ['print_grid_line']
-    is_settings = True
-    for s in settings_int:
-        if s not in EXCEL_DATA:
-            is_settings = False
-            cprint(f'Excel設定データに{s}がありません。', 'red')
+    # ブロックごとのデータを取得
+    block_data_list: list[str] = []
+    for i, line in enumerate(mosaic_data_lines):
+        if line.startswith('---') and i != 0:
+            # 区切り文字を追加
+            block_data_list.append('///')
+            block_data_list.append(line)
         else:
-            if not is_float(EXCEL_DATA[s]):
+            block_data_list.append(line)
+
+    # 区切り文字でリストを分割し再代入
+    block_data_list = ''.join(block_data_list).split('///')
+
+    # '='が含まれる行を取得
+    calc_data_list: list[str] = []
+    for block_data in block_data_list:
+        lines = block_data.split('\n')
+        for line in lines:
+            if '=' in line:
+                calc_data_list.append(line)
+        # 区切り文字を追加
+        calc_data_list.append('///')
+
+    # 区切り文字でリストを分割し再代入 最後の要素は削除
+    calc_data_list = ''.join(calc_data_list).split('///')[:-1]
+
+
+    # 各クラスごとのピクセル合計データを取得
+    calc_sum_class_dict: dict[str, int] = {}
+    calc_class_result: list[str] = []
+    class_number: int = 0
+    for i, line in enumerate(calc_data_list):
+        # 辞書型に変換
+        pixel_sum_class_dict: dict[str, int] = {}
+        pairs: list[str] = line.split()
+        for pair in pairs:
+            key, value = pair.split('=')
+            pixel_sum_class_dict[key] = int(value)
+        calc_sum_class_dict = add_dictionaries(calc_sum_class_dict, pixel_sum_class_dict)
+
+        # 各クラス、最初の行にクラス情報を追加 結果をリストに格納
+        if (i + 1) % blocks_per_class == 0:
+            calc_class_result.append(f'--------------- {classes[class_number]} ---------------')
+            for key in calc_sum_class_dict:
+                calc_class_result.append(f'{key}: {calc_sum_class_dict[key]}   [ {math.ceil(calc_sum_class_dict[key] / pieces_per_origami)}枚 ]')
+            calc_class_result.append('')
+            calc_sum_class_dict = {}
+            class_number += 1
+
+    calc_result = ''.join(calc_result) + '\n' * 3 + '\n'.join(calc_class_result)
+
+    # 計算した結果をファイルに書き込む
+    write_text_file(os.path.join(path, 'output', f'{output_file_name}_origami.txt'), ''.join(calc_result))
+
+    time_end = time.time()
+    cprint(f'\n計算が完了しました。', 'light_blue')
+    cprint(f'ファイル名: {output_file_name}_origami.txt     計算時間: {time_count(time_start, time_end)}\n', 'light_blue')
+
+
+    cprint('\nデータを整形してCSVファイルに変換しています。', 'light_green')
+    time_start = time.time()
+
+    summarized_result: list[str] = []
+    class_number: int = 0
+    class_page_number: int = 0
+    for i, block_data in enumerate(block_data_list):
+        lines = block_data.split('\n')[:-1]
+        # '='が含まれる行は削除
+        block_data = [line for line in lines if '=' not in line]
+        # 1文字ずつカンマを挿入 (先頭行は除く)
+        block_data = [insert_commas(line) if i != 0 else line for i, line in enumerate(block_data)]
+
+        # 最終行を取得
+        last_line: str = block_data[-1]
+        commas_count = last_line.count(',')
+
+        if replace_white_character:
+            # "白"を空文字に置換
+            block_data.replace('白', '')
+
+        # 先頭行を最終行に移動
+        block_info_text = block_data.pop(0)
+
+        block_info_text = ','.join([block_info_text] + [''] * commas_count)
+        block_info_text += f'Class {classes[class_number]} : {class_page_number + 1} / {blocks_per_class}'
+
+        block_data.append(block_info_text)
+
+        summarized_result.append('\n'.join(block_data))
+
+        class_page_number += 1
+        if (i + 1) % blocks_per_class == 0:
+            class_page_number = 0
+            class_number += 1
+
+
+    # 調整したデータをcsvファイルに書き込む
+    write_text_file(os.path.join(path, 'output', f'{output_file_name}.csv'), '\n'.join(summarized_result))
+
+    time_end = time.time()
+    cprint(f'\nCSVファイルに変換しました。', 'light_blue')
+    cprint(f'ファイル名: {output_file_name}.csv     処理時間: {time_count(time_start, time_end)}\n', 'light_blue')
+
+
+    if EXCEL_DATA != None:
+        # 全設定データがあるか確認、数値か確認
+        settings_int = ['width', 'height', 'margin_top', 'margin_bottom', 'margin_left', 'margin_right', 'margin_header', 'margin_footer']
+        settings = ['print_grid_line']
+        is_settings = True
+        for s in settings_int:
+            if s not in EXCEL_DATA:
                 is_settings = False
-                cprint(f'Excel設定データの{EXCEL_DATA[s]}は整数値ではありません。', 'red')
+                cprint(f'Excel設定データに{s}がありません。', 'red')
             else:
-                EXCEL_DATA[s] = float(EXCEL_DATA[s])
-    for s in settings:
-        if s not in EXCEL_DATA:
-            is_settings = False
-            cprint(f'Excel設定データに{s}がありません。', 'red')
+                if not is_float(EXCEL_DATA[s]):
+                    is_settings = False
+                    cprint(f'Excel設定データの{EXCEL_DATA[s]}は整数値ではありません。', 'red')
+                else:
+                    EXCEL_DATA[s] = float(EXCEL_DATA[s])
+        for s in settings:
+            if s not in EXCEL_DATA:
+                is_settings = False
+                cprint(f'Excel設定データに{s}がありません。', 'red')
 
+        if is_settings:
+            cprint('\nExcel設定データを読み込みました。', 'light_blue')
+            cprint('Excelファイルを作成しています。\n', 'light_green')
+            time_start = time.time()
 
-    if is_settings:
-        cprint('\nExcel設定データを読み込みました。', 'light_blue')
-        cprint('Excelファイルを作成します。\n', 'light_green')
-        time_start = time.time()
+            # csvファイルを読み込み、Excelファイルに変換
+            wb = xl.Workbook()
+            wb.remove(wb.active)
+            sheet = wb.create_sheet()
 
-        # csvファイルを読み込み、Excelファイルに変換
-        wb = xl.Workbook()
-        wb.remove(wb.active)
-        sheet = wb.create_sheet()
+            with open(os.path.join(path, 'output', f'{output_file_name}.csv'), 'r', encoding="Shift-JIS") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    sheet.append(row)
 
-        with open(os.path.join(path, 'output', f'{output_file_name}.csv'), 'r', encoding="Shift-JIS") as f:
-            reader = csv.reader(f)
-            for row in reader:
-                sheet.append(row)
+            # 枠線を追加
+            side = Side(style='thin', color='000000')
+            border = Border(top=side, bottom=side, left=side, right=side)
 
-        # 枠線を追加
-        side = Side(style='thin', color='000000')
-        border = Border(top=side, bottom=side, left=side, right=side)
+            width = json_data['Excel']['width']
+            height = json_data['Excel']['height']
 
-        width = json_data['Excel']['width']
-        height = json_data['Excel']['height']
+            for row in sheet:
+                # 行幅を調整
+                sheet.row_dimensions[row[0].row].height = height
+                for cell in row:
+                    if sheet[cell.coordinate].value:
+                        if sheet[cell.coordinate].value.startswith('---'):
+                            # 中央左揃え
+                            sheet[cell.coordinate].alignment = xl.styles.Alignment(vertical='center')
+                        elif sheet[cell.coordinate].value.startswith('Class'):
+                            # 中央右揃え
+                            sheet[cell.coordinate].alignment = xl.styles.Alignment(horizontal='right', vertical='center')
+                        else:
+                            # 上下中央揃え
+                            sheet[cell.coordinate].alignment = xl.styles.Alignment(horizontal='center', vertical='center')
+                            sheet[cell.coordinate].border = border
 
-        for row in sheet:
-            # 行幅を調整
-            sheet.row_dimensions[row[0].row].height = height
-            for cell in row:
-                if sheet[cell.coordinate].value:
-                    if not sheet[cell.coordinate].value.startswith('---'):
-                        sheet[cell.coordinate].border = border
-                        # 中央揃え
-                        sheet[cell.coordinate].alignment = xl.styles.Alignment(horizontal='center', vertical='center')
-                    else:
-                        # 上下中央揃え
-                        sheet[cell.coordinate].alignment = xl.styles.Alignment(vertical='center')
+            # 1行目の全てのセルを取得し、その幅を調整する
+            for cell in sheet[1]:
+                sheet.column_dimensions[cell.column_letter].width = width
 
+            # ページレイアウトを設定
+            # 印刷の向き: 横
+            sheet.page_setup.orientation = sheet.ORIENTATION_LANDSCAPE
+            # 余白
+            sheet.page_margins.top = json_data['Excel']['margin_top']
+            sheet.page_margins.bottom = json_data['Excel']['margin_bottom']
+            sheet.page_margins.left = json_data['Excel']['margin_left']
+            sheet.page_margins.right = json_data['Excel']['margin_right']
+            sheet.page_margins.header = json_data['Excel']['margin_header']
+            sheet.page_margins.footer = json_data['Excel']['margin_footer']
+            # 枠線を印刷
+            if json_data['Excel']['print_grid_line'] == "True":
+                sheet.print_options.gridLines = True
+            elif json_data['Excel']['print_grid_line'] == "False":
+                sheet.print_options.gridLines = False
+            else:
+                cprint('Excel設定データの print_grid_line が True または False ではありません。\n枠線印刷の設定は実行されませんでした\n', 'red')
 
-        # 1行目の全てのセルを取得し、その幅を調整する
-        for cell in sheet[1]:
-            sheet.column_dimensions[cell.column_letter].width = width
+            try:
+                wb.save(os.path.join(path, 'output', f'{output_file_name}.xlsx'))
+            except Exception as e:
+                cprint(f'Excelファイルの保存に失敗しました。\n---------- エラーメッセージ ----------\n{e}', 'red')
+                os._exit(0)
+            else:
+                time_end = time.time()
+                cprint(f'Excelファイルを保存しました。', 'light_blue')
+                cprint(f'ファイル名: {output_file_name}.xlsx     処理時間: {time_count(time_start, time_end)}', 'light_blue')
 
-        # ページレイアウトを設定
-        # 印刷の向き: 横
-        sheet.page_setup.orientation = sheet.ORIENTATION_LANDSCAPE
-        # 余白
-        sheet.page_margins.top = json_data['Excel']['margin_top']
-        sheet.page_margins.bottom = json_data['Excel']['margin_bottom']
-        sheet.page_margins.left = json_data['Excel']['margin_left']
-        sheet.page_margins.right = json_data['Excel']['margin_right']
-        sheet.page_margins.header = json_data['Excel']['margin_header']
-        sheet.page_margins.footer = json_data['Excel']['margin_footer']
-        # 枠線を印刷
-        if json_data['Excel']['print_grid_line'] == "True":
-            sheet.print_options.gridLines = True
-        elif json_data['Excel']['print_grid_line'] == "False":
-            sheet.print_options.gridLines = False
         else:
-            cprint('Excel設定データの print_grid_line が True または False ではありません。\n枠線印刷の設定は実行されませんでした\n', 'red')
-
-        try:
-            wb.save(os.path.join(path, 'output', f'{output_file_name}.xlsx'))
-        except Exception as e:
-            cprint(f'Excelファイルの保存に失敗しました。\n---------- エラーメッセージ ----------\n{e}', 'red')
-            os._exit(0)
-        else:
-            time_end = time.time()
-            cprint(f'Excelファイルを保存しました。', 'light_blue')
-            cprint(f'ファイル名: {output_file_name}.xlsx     処理時間: {time_count(time_start, time_end)}', 'light_blue')
-
+            cprint('Excel設定データの読み込みに失敗しました。Excelファイルを作成できませんでした。', 'red')
     else:
-        cprint('Excel設定データの読み込みに失敗しました。Excelファイルを作成できませんでした。', 'red')
-else:
-    cprint('Excel設定データがありません。Excelファイルを作成できませんでした。', 'red')
+        cprint('Excel設定データがありません。Excelファイルを作成できませんでした。', 'red')
 
-cprint('\n--- プログラムを終了します ---', 'light_magenta')
+try:
+    main()
+except KeyboardInterrupt:
+    cprint('\n\n---- プログラムを強制終了しました ----', 'red')
+    input('\n -- 終了するには何かキーを押してください -- ')
+except Exception as e:
+    cprint(f'\n\n---- プログラムが異常終了しました ----\n---------- エラーメッセージ ----------\n{e}', 'red')
+    input('\n -- 終了するには何かキーを押してください -- ')
+else:
+    input('\n -- 終了するには何かキーを押してください -- ')

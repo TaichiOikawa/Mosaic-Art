@@ -35,11 +35,28 @@ $ python3 main.py
 $ pip install pyinstaller
 
 # exe化
-$ pyinstaller main.py --onefile --clean
+$ pyinstaller main.spec
 ```
 
 
 ## メモ
+### Release時のディレクトリ構成
+```
+モザイク画データ_変換プログラム
+├── bigart21
+│   ├── bigart.exe
+│   └── bigart21.txt
+├── color.pal
+├── license
+│   ├── Develop.md
+│   ├── How-to-use.md
+│   ├── LICENSE.txt
+│   ├── README.md
+│   └── img
+├── settings.json
+└── モザイク画データ_変換プログラム.exe
+```
+
 ### openpyxlの仕様
 - 行幅、列幅、余白等、だいたいずれます。根気強く調整すること。
 - なぜかページサイズにB4はありません。あと、Excel上で指定する場合は「JIS B4 (25.71*36.4)」を使用すること。
